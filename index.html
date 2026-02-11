@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>PAINEL DE CONTROLE - ADM KAUAN</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    
+    <style>
+        body { background: #050505; color: #eee; font-family: 'Segoe UI', sans-serif; padding: 15px; }
+        .titulo-painel { text-align: center; color: #ff0080; text-transform: uppercase; font-weight: bold; margin-bottom: 20px; border-bottom: 2px solid #ff0080; padding-bottom: 10px; }
+        .card { background: #111; border: 1px solid #333; border-radius: 12px; padding: 15px; margin-bottom: 20px; border-left: 4px solid #ff0080; }
+        h2 { color: #ff0080; font-size: 14px; text-transform: uppercase; margin-bottom: 10px; }
+        .stats { display: flex; justify-content: space-around; font-weight: bold; color: #00ff00; background: #000; padding: 10px; border-radius: 8px; border: 1px solid #ff008033; text-align: center; }
+        #logs { background: #000; color: #00ff00; font-family: monospace; font-size: 11px; height: 180px; overflow-y: auto; padding: 10px; border: 1px solid #222; margin: 10px 0; border-radius: 8px; }
+        .key-item { background: #1a1a1a; padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #333; position: relative; }
+        /* Estilo para a Key riscada/expirada quando o robô está off */
+        .key-expirada { background: #440000 !important; border: 1px solid red !important; text-decoration: line-through; opacity: 0.8; }
+        .progresso-container { background: #333; height: 10px; border-radius: 5px; margin: 10px 0; overflow: hidden; border: 1px solid #000; }
+        .progresso-barra { height: 100%; width: 100%; transition: width 1s linear; }
+        .cor-verde { background: #00ff00; }
+        .cor-vermelha { background: #ff0000; animation: pulso 1s infinite; }
+        @keyframes pulso { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        
+        .flex-buttons { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; text-decoration: none !important; }
+        .btn-quadrado { padding: 18px 5px; border-radius: 8px; border: none; font-weight: bold; color: #fff; cursor: pointer; text-transform: uppercase; font-size: 12px; }
+
+        input, select, button { width: 100%; padding: 12px; margin: 5px 0; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff; box-sizing: border-box; }
+        .btn-robo { cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .robo-on { background: #00ff0022; color: #00ff00; border: 2px solid #00ff00; }
+        .robo-off { background: #222; color: #ff4444; border: 2px solid #ff4444; }
+        .btn-manutencao { background: #5500ff; color: #fff; font-weight: bold; border: none; cursor: pointer; }
+        .status-badge { font-size: 9px; padding: 2px 5px; border-radius: 4px; margin-left: 10px; text-transform: uppercase; }
+        .on { background: #00ff00; color: #000; }
+        .off { background: #444; color: #fff; }
+        .ban-list { background: #000; border: 1px solid red; padding: 10px; font-size: 11px; max-height: 100px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+    <h1 class="titulo-painel">PAINEL DE CONTROLE - ADM KAUAN</h1>
+
+    <div class="card">
+        <h2>Painel de Controle Global</h2>
+        <button id="btn-robo-status" class="btn-robo robo-off" onclick="toggleRobo()">🤖 ROBÔ: DESATIVADO</button>
+        <button id="btn-manutencao" class="btn-manutencao" onclick="toggleManutencao()">🛠️ MODO MANUTENÇÃO: OFF</button>
+        <button style="background: #0055ff; font-weight: bold;" onclick="mensagemGeral()">MENSAGEM PARA TODOS</button>
+        <button style="background: #660000; color: #fff; font-weight: bold; border: 1px solid red;" onclick="cancelarTodas()">⚠️ DELETAR TUDO (PÂNICO)</button>
+    </div>
+
+    <div class="card">
+        <h2>Status do Sistema</h2>
+        <div class="stats">
+            <div>USUÁRIOS USANDO<br><span id="count-online">0</span></div>
+            <div>TOTAL KEYS<br><span id="count-keys">0</span></div>
+            <div>EXPIRADAS<br><span id="count-expirando" style="color: gold;">0</span></div>
+        </div>
+        <div id="logs"></div>
+        <button style="background:#222; font-size:10px;" onclick="db.ref('logs').remove()">LIMPAR LOGS</button>
+    </div>
+
+    <div class="card">
+        <h2>Gerador Profissional MIX</h2>
+        <button style="background: #222;" onclick="gerarMix()">GERAR CÓDIGO ALEATÓRIO</button>
+        <input type="text" id="newKey" placeholder="Código da Key...">
+        
+        <label style="font-size: 10px; color: #888;">DISPOSITIVOS:</label>
+        <select id="keyLimit">
+            <option value="1">1 Dispositivo</option>
+            <option value="2">2 Dispositivos</option>
+            <option value="3">3 Dispositivos</option>
+            <option value="4">4 Dispositivos</option>
+            <option value="5">5 Dispositivos</option>
+            <option value="999999">Todos</option>
+        </select>
+
+        <label style="font-size: 10px; color: #888;">TEMPO:</label>
+        <select id="keyTime">
+            <option value="0.00347">Teste (5 Minutos)</option>
+            <option value="0.00694">Teste (10 Minutos)</option>
+            <option value="1">1 Dia</option>
+            <option value="4">4 Dias</option>
+            <option value="7">7 Dias</option>
+            <option value="30">30 Dias</option>
+            <option value="99999">Permanente</option>
+        </select>
+        <button style="background: #ff0080; font-weight: bold;" id="btnSalvar" onclick="salvarKey()">ATIVAR E SALVAR</button>
+    </div>
+
+    <div class="card">
+        <h2>🚫 BANIR ID DO CELULAR</h2>
+        <input type="text" id="idParaBanir" placeholder="Cole o HWID aqui...">
+        <button style="background: red; font-weight: bold;" onclick="banirHWID()">BANIR ID AGORA</button>
+        <div class="ban-list" id="listaBanidos"></div>
+    </div>
+
+    <div class="card">
+        <h2>Gerenciar Clientes</h2>
+        <div id="listaChaves"></div>
+    </div>
+
+    <script>
+        const firebaseConfig = { databaseURL: "https://painel-vip-49b10-default-rtdb.firebaseio.com/" };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        
+        let roboAtivo = false;
+
+        function gerarMix() {
+            const r = Math.random().toString(36).substring(2, 10).toUpperCase();
+            document.getElementById('newKey').value = r;
+        }
+
+        function salvarKey() {
+            const k = document.getElementById('newKey').value;
+            if(!k) return alert("Gere ou digite uma key!");
+            const btn = document.getElementById('btnSalvar');
+            btn.innerText = "SALVANDO...";
+            btn.disabled = true;
+
+            const t = parseFloat(document.getElementById('keyTime').value);
+            const agora = Date.now();
+            const exp = (t >= 9999) ? "Permanente" : agora + Math.floor(t * 24 * 60 * 60 * 1000);
+            
+            db.ref('keys/'+k).set({ 
+                chave: k, inicio: agora, expira: exp, 
+                limite: parseInt(document.getElementById('keyLimit').value), 
+                usando: 0, hwids: "", mensagem: "", avisoRobo: false, vibrar: false
+            }).then(() => {
+                db.ref('logs').push({ texto: `[SISTEMA] VOCÊ CRIOU A KEY: ${k}` });
+                alert("Key " + k + " ativada!");
+                btn.innerText = "ATIVAR E SALVAR";
+                btn.disabled = false;
+                document.getElementById('newKey').value = "";
+            });
+        }
+
+        function toggleRobo() {
+            roboAtivo = !roboAtivo;
+            document.getElementById('btn-robo-status').className = roboAtivo ? "btn-robo robo-on" : "btn-robo robo-off";
+            document.getElementById('btn-robo-status').innerText = roboAtivo ? "🤖 ROBÔ: ATIVADO" : "🤖 ROBÔ: DESATIVADO";
+            db.ref('config/roboAtivo').set(roboAtivo);
+            
+            if(roboAtivo) {
+               db.ref('logs').push({ texto: `[ROBÔ] ROBÔ ATIVADO! LIMPANDO EXPIRADAS...` });
+            } else {
+               db.ref('logs').push({ texto: `[ROBÔ] O ROBÔ FOI DESATIVADO! LIMPEZA MANUAL ATIVA.` });
+            }
+        }
+
+        function toggleManutencao() {
+            db.ref('config/manutencao').once('value', snap => {
+                const status = snap.val() ? snap.val().ativo : false;
+                let msg = "";
+                if(!status) {
+                    msg = prompt("MENSAGEM DE MANUTENÇÃO PARA O CLIENTE:");
+                    if(msg == null) return;
+                }
+                db.ref('config/manutencao').set({ ativo: !status, aviso: msg || "SISTEMA EM MANUTENÇÃO AGUARDE!" });
+                db.ref('logs').push({ texto: `[SISTEMA] MODO MANUTENÇÃO ${!status ? 'LIGADO' : 'DESLIGADO'}` });
+            });
+        }
+
+        function banirHWID() {
+            const id = document.getElementById('idParaBanir').value;
+            if(!id) return;
+            db.ref('banidos/' + id).set(true);
+            db.ref('logs').push({ texto: `[BAN] O ID ${id} FOI BANIDO PELO ADM!` });
+            document.getElementById('idParaBanir').value = "";
+        }
+
+        db.ref('banidos').on('value', snap => {
+            const div = document.getElementById('listaBanidos'); div.innerHTML = "<b>IDs BANIDOS:</b><br>";
+            snap.forEach(b => {
+                div.innerHTML += `${b.key} <button onclick="db.ref('banidos/${b.key}').remove()" style="width:auto; padding:2px 5px; background:blue; font-size:9px;">DESBANIR</button><br>`;
+            });
+        });
+
+        // LOOP DO ROBÔ - AGORA RESPEITA O BOTÃO DESATIVADO
+        setInterval(() => {
+            const agora = Date.now();
+            db.ref('keys').once('value', snap => {
+                snap.forEach(c => {
+                    const d = c.val();
+                    if(d.expira !== "Permanente") {
+                        const resta = d.expira - agora;
+                        
+                        // Manda aviso apenas se faltar pouco tempo (Robô ativo ou não pode avisar)
+                        if(resta > 0 && resta < 3600000 && !d.avisoRobo) {
+                            db.ref('keys/'+d.chave).update({ 
+                                mensagem: "🤖 [ROBÔ] Sua Key está perto de expirar! Renove agora!", 
+                                avisoRobo: true, vibrar: true 
+                            });
+                        }
+
+                        // Lógica Crucial: Só remove se roboAtivo for TRUE
+                        if(resta <= 0 && roboAtivo) {
+                            db.ref('logs').push({ texto: `[ROBÔ] AUTO-REMOÇÃO: ${d.chave}` });
+                            db.ref('keys/'+d.chave).remove();
+                        }
+                    }
+                });
+            });
+        }, 10000);
+
+        function mensagemGeral() {
+            const m = prompt("Mensagem para TODOS:");
+            if(m) db.ref('keys').once('value', s => s.forEach(c => {
+                db.ref('keys/'+c.key).update({ mensagem: "AVISO: " + m, vibrar: true });
+            }));
+        }
+
+        function renovar(key) {
+            const tempo = prompt("Dias para ADICIONAR:");
+            if(tempo) db.ref('keys/'+key).once('value', snap => {
+                const atual = snap.val().expira > Date.now() ? snap.val().expira : Date.now();
+                const n = atual + Math.floor(parseFloat(tempo) * 24 * 60 * 60 * 1000);
+                db.ref('keys/'+key).update({ expira: n, avisoRobo: false, vibrar: true });
+            });
+        }
+
+        function cancelarTodas() { if(confirm("DELETAR TUDO?")) db.ref('keys').remove(); }
+
+        db.ref('keys').on('value', snap => {
+            const list = document.getElementById('listaChaves'); list.innerHTML = "";
+            let on = 0; let expCount = 0;
+            snap.forEach(child => {
+                const d = child.val();
+                if(d.usando) on += d.usando;
+                const resta = (d.expira === "Permanente") ? 999999999 : d.expira - Date.now();
+                const expirou = resta <= 0 && d.expira !== "Permanente";
+                if(expirou) expCount++;
+
+                list.innerHTML += `
+                <div class="key-item ${expirou ? 'key-expirada' : ''}">
+                    <b>🔑 ${d.chave}</b> 
+                    <span class="status-badge ${d.usando ? 'on' : 'off'}">${d.usando ? 'ONLINE' : 'OFFLINE'}</span><br>
+                    <small>${expirou ? '❌ EXPIRADA' : 'Vence: ' + new Date(d.expira).toLocaleString()}</small>
+                    <div class="progresso-container">
+                        <div class="progresso-barra ${resta < 3600000 ? 'cor-vermelha' : 'cor-verde'}" style="width: ${d.expira === "Permanente" ? 100 : Math.max(0, (resta/(d.expira-d.inicio))*100)}%"></div>
+                    </div>
+                    <div class="flex-buttons">
+                        <button class="btn-quadrado" style="background:#0055ff;" onclick="let m = prompt('Mensagem:'); if(m) db.ref('keys/${d.chave}').update({mensagem: 'Suporte: '+m, vibrar: true})">MENSAGEM</button>
+                        <button class="btn-quadrado" style="background:#ffaa00; color:#000;" onclick="renovar('${d.chave}')">RENOVAR</button>
+                        <button class="btn-quadrado" style="background:red;" onclick="if(confirm('Excluir esta key?')) db.ref('keys/${d.chave}').remove()">EXCLUIR</button>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('count-keys').innerText = snap.numChildren();
+            document.getElementById('count-online').innerText = on;
+            document.getElementById('count-expirando').innerText = expCount;
+        });
+
+        db.ref('logs').limitToLast(15).on('value', snap => {
+            const lb = document.getElementById('logs'); lb.innerHTML = "";
+            snap.forEach(l => { lb.innerHTML = `<div>> ${l.val().texto}</div>` + lb.innerHTML; });
+        });
+    </script>
+</body>
+</html>
